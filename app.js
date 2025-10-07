@@ -40,6 +40,7 @@ const elements = {
     nextStreamDay: document.getElementById('nextStreamDay'),
     nextStreamSubject: document.getElementById('nextStreamSubject'),
     countdownValue: document.getElementById('countdownValue'),
+    loadingIndicator: document.getElementById('loadingIndicator'),
 };
 
 // Initialize Application
@@ -258,13 +259,24 @@ function openVideoModal(video) {
     elements.modalDuration.textContent = `Duration: ${video.duration}`;
     elements.modalDate.textContent = formatDate(video.uploadDate);
     elements.modalStartTime.textContent = `Started at ${video.startTime}`;
+
     const player = document.getElementById('modalPlayer');
+
+    // Show loading indicator
+    elements.loadingIndicator.classList.remove('hidden');
+
+    // Set the iframe src to the Google Drive preview URL
     if (video.gdrive_url) {
-        const fileIdMatch = video.gdrive_url.match(/file\/d\/([^/]+)/);
-        if (fileIdMatch && fileIdMatch[1]) {
-            player.src = `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`;
-        } else { player.src = ''; }
-    } else { player.src = ''; }
+        player.src = video.gdrive_url;
+        // Hide loading when iframe loads
+        player.onload = () => {
+            elements.loadingIndicator.classList.add('hidden');
+        };
+    } else {
+        player.src = '';
+        elements.loadingIndicator.classList.add('hidden');
+    }
+
     elements.videoModal.classList.remove('hidden');
     elements.videoModal.classList.add('fade-in');
     document.body.style.overflow = 'hidden';
@@ -273,6 +285,7 @@ function openVideoModal(video) {
 function closeVideoModal() {
     const player = document.getElementById('modalPlayer');
     player.src = '';
+    elements.loadingIndicator.classList.add('hidden');
     elements.videoModal.classList.add('hidden');
     document.body.style.overflow = '';
 }
