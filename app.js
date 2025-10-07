@@ -126,7 +126,10 @@ function updateClock() {
     elements.timeValue.textContent = istTime.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const istHour = istTime.getHours();
     const istDay = istTime.getDay();
-    AppState.isLive = (istHour >= 9 && istHour < 11 && istDay > 0 && istDay < 7);
+    //old tIME
+    //AppState.isLive = (istHour >= 9 && istHour < 11 && istDay > 0 && istDay < 7);
+    //nEW tIME 
+    AppState.isLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
     updateLiveStatus();
     updateNextStreamInfo();
 }
