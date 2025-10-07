@@ -258,18 +258,13 @@ function openVideoModal(video) {
     elements.modalDuration.textContent = `Duration: ${video.duration}`;
     elements.modalDate.textContent = formatDate(video.uploadDate);
     elements.modalStartTime.textContent = `Started at ${video.startTime}`;
-
     const player = document.getElementById('modalPlayer');
-
-    // This is now much simpler. The gdrive_url is a direct link.
     if (video.gdrive_url) {
-        player.src = video.gdrive_url;
-        player.load();
-        player.play();
-    } else {
-        player.src = '';
-    }
-
+        const fileIdMatch = video.gdrive_url.match(/file\/d\/([^/]+)/);
+        if (fileIdMatch && fileIdMatch[1]) {
+            player.src = `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`;
+        } else { player.src = ''; }
+    } else { player.src = ''; }
     elements.videoModal.classList.remove('hidden');
     elements.videoModal.classList.add('fade-in');
     document.body.style.overflow = 'hidden';
@@ -277,7 +272,6 @@ function openVideoModal(video) {
 
 function closeVideoModal() {
     const player = document.getElementById('modalPlayer');
-    player.pause();
     player.src = '';
     elements.videoModal.classList.add('hidden');
     document.body.style.overflow = '';
