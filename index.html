@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parmar SSC Live Stream & Video Library</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1 class="header-title">Parmar SSC Live Stream & Video Library</h1>
+                    <div class="header-info">
+                        <div class="live-status" id="liveStatus">
+                            <div class="status-dot offline" id="statusDot"></div>
+                            <span class="status-text" id="statusText">OFFLINE</span>
+                        </div>
+                        <div class="current-time" id="currentTime">
+                            <span class="time-label">Current Time (IST):</span>
+                            <span class="time-value" id="timeValue">--:--</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="search-container">
+                        <input type="text" id="searchInput" class="form-control search-input" placeholder="Search videos...">
+                        <button class="btn btn--primary search-btn" id="searchBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                                <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <button class="btn btn--secondary" id="refreshBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" stroke="currentColor" stroke-width="2"/>
+                            <path d="M21 3v5h-5" stroke="currentColor" stroke-width="2"/>
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" stroke="currentColor" stroke-width="2"/>
+                            <path d="M8 16H3v5" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Refresh
+                    </button>
+                    <button class="btn btn--secondary" id="themeToggle">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+                            <line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2"/>
+                            <line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/>
+                            <line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2"/>
+                            <line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="live-section hidden" id="liveSection">
+                <div class="live-player-container">
+                    <div class="live-player" id="livePlayer">
+                        </div>
+                    <div class="live-info">
+                        <h2 class="live-title">GK 4.0 Live Session</h2>
+                        <div class="live-meta">
+                            <span class="viewers">Watching on YouTube</span>
+                            <span class="live-badge">LIVE</span>
+                            <span class="stream-start-time">Started at 9:00 AM IST</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="offline-message" id="offlineMessage">
+                <div class="offline-content">
+                    <div class="offline-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h2>Stream is Currently Offline</h2>
+                    <p>The system is monitoring for the next live class. Check the video library below for past recordings.</p>
+                    
+                    <div class="next-stream-info" id="nextStreamInfo">
+                        <h3 id="nextStreamDay">Next Class: Loading...</h3>
+                        <p id="nextStreamSubject">Subject: Loading...</p>
+                        <div class="countdown-timer">
+                            <span id="countdownValue">--:--:--:--</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="video-library" id="videoLibrary">
+                <div class="library-header">
+                    <h2>GK 4.0 Video Library</h2>
+                    <div class="library-controls">
+                        <select class="form-control sort-select" id="sortSelect">
+                            <option value="latest">Latest First</option>
+                            <option value="alphabetical">Alphabetical</option>
+                            <option value="duration">Duration</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="subject-tabs" id="subjectTabsContainer">
+                    </div>
+
+                <div class="video-grid" id="videoGrid">
+                    </div>
+
+                <div class="no-results hidden" id="noResults">
+                    <div class="no-results-content">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                            <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <h3>No videos found</h3>
+                        <p>Try clearing your search or selecting a different subject.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal hidden" id="videoModal">
+        <div class="modal-overlay" id="modalOverlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Video Title</h3>
+                <button class="modal-close" id="modalClose">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/>
+                        <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+               <div class="video-player">
+    <video id="modalPlayer" src="" controls autoplay style="width:100%; height:100%;"></video>
+</div>
+                <div class="video-info">
+                    <div class="video-meta">
+                        <span class="duration" id="modalDuration">0:00</span>
+                        <span class="upload-date" id="modalDate">Today</span>
+                        <span class="start-time-badge" id="modalStartTime">Started at 9:00 AM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
+                                       
