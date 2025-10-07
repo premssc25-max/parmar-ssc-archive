@@ -147,15 +147,13 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="video-player">
-                    <iframe 
-                        id="modalPlayer"
-                        src="" 
-                        frameborder="0" 
-                        allow="autoplay; encrypted-media" 
-                        allowfullscreen>
-                    </iframe>
+                <div class="loading-indicator" id="loadingIndicator">
+                    <div class="loading-spinner"></div>
+                    <p>Loading video...</p>
                 </div>
+               <div class="video-player">
+    <iframe id="modalPlayer" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</div>
                 <div class="video-info">
                     <div class="video-meta">
                         <span class="duration" id="modalDuration">0:00</span>
@@ -170,3 +168,4 @@
     <script src="app.js"></script>
 </body>
 </html>
+                                       
