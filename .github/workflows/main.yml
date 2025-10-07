@@ -3,9 +3,11 @@ name: Parmar SSC Daily Downloader
 on:
   workflow_dispatch:
   schedule:
-    # UPDATED: Runs every 15 mins between 3:15 and 5:00 UTC (8:45 AM - 10:30 AM IST)
+    # UPDATED: Runs every 15 mins between 3:15 and 6:15 UTC (8:45 AM - 11:45 AM IST)
     - cron: '15,30,45 3 * * 1-6'
-    - cron: '0,15,30 4 * * 1-6'
+    - cron: '0,15,30,45 4 * * 1-6'
+    - cron: '0,15,30,45 5 * * 1-6'
+    - cron: '0,15 6 * * 1-6'
 
 jobs:
   download-and-upload:
@@ -34,7 +36,7 @@ jobs:
         run: |
           mkdir -p ~/.config/rclone
           echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
-      
+        
       - name: Run Scraper and Downloader
         id: downloader
         run: |
