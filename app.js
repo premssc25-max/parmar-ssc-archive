@@ -1,7 +1,7 @@
 // Application State
 const AppState = {
     isLive: false,
-    liveVideoId: null, // <-- Naya state live video ID ke liye
+    liveVideoId: null, // For storing the specific live video ID
     currentSubject: null,
     searchQuery: '',
     sortBy: 'latest',
@@ -46,20 +46,20 @@ const elements = {
 
 // Initialize Application
 function initApp() {
-    // Ab yeh 3 files ko load karega
+    // Fetches all three necessary data files
     Promise.all([
         fetch('videos.json').then(res => res.json()),
         fetch('schedule.json').then(res => res.json()),
-        fetch('live.json').then(res => res.json()) // <-- live.json ko fetch karega
+        fetch('live.json').then(res => res.json()) 
     ])
-    .then(([videoData, scheduleData, liveData]) => { // <-- liveData yahan aa gaya
+    .then(([videoData, scheduleData, liveData]) => {
         AppState.videos = {};
         videoData.forEach(video => {
             if (!AppState.videos[video.subject]) AppState.videos[video.subject] = [];
             AppState.videos[video.subject].push(video);
         });
         AppState.schedule = scheduleData;
-        AppState.liveVideoId = liveData.liveVideoId; // <-- Live video ID save ho gaya
+        AppState.liveVideoId = liveData.liveVideoId; // Saves the live video ID
 
         populateSubjectTabs();
         loadUserPreferences();
@@ -126,7 +126,8 @@ function startClock() {
 
 function updateClock() {
     const now = new Date();
-    const istTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolata" }));
+    // Corrected Spelling: Asia/Kolkata
+    const istTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     elements.timeValue.textContent = istTime.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const istHour = istTime.getHours();
     const istDay = istTime.getDay();
@@ -134,14 +135,13 @@ function updateClock() {
     // Time window check
     const isTimeForLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
     
-    // Is live only if time is right AND we have a video ID from live.json
+    // A stream is live only if the time is right AND we have a video ID from live.json
     AppState.isLive = isTimeForLive && AppState.liveVideoId;
     
     updateLiveStatus();
     updateNextStreamInfo();
 }
 
-// --- YEH POORA FUNCTION UPDATE HUA HAI ---
 function updateLiveStatus() {
     const livePlayerDiv = document.getElementById('livePlayer');
     if (!elements.liveSection || !elements.offlineMessage || !livePlayerDiv) return;
@@ -152,7 +152,7 @@ function updateLiveStatus() {
         elements.liveSection.classList.remove('hidden');
         elements.offlineMessage.classList.add('hidden');
         
-        // Player ko tabhi load karein jab woh pehle se loaded na ho
+        // Loads the player only if it's not already loaded with the correct video
         const existingIframe = livePlayerDiv.querySelector('iframe');
         const expectedSrc = `https://www.youtube.com/embed/${AppState.liveVideoId}?autoplay=1&mute=1`;
         
@@ -162,7 +162,7 @@ function updateLiveStatus() {
             iframe.frameBorder = "0";
             iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
             iframe.allowFullscreen = true;
-            livePlayerDiv.innerHTML = ''; // Purana content saaf karein
+            livePlayerDiv.innerHTML = ''; // Clear old content
             livePlayerDiv.appendChild(iframe);
         }
     } else {
@@ -170,7 +170,7 @@ function updateLiveStatus() {
         elements.statusText.textContent = "OFFLINE";
         elements.liveSection.classList.add('hidden');
         elements.offlineMessage.classList.remove('hidden');
-        livePlayerDiv.innerHTML = ''; // Player saaf karein
+        livePlayerDiv.innerHTML = ''; // Clear player
     }
 }
 
