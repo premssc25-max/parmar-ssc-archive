@@ -52,7 +52,9 @@ jobs:
         run: |
           git config --global user.name 'GitHub Actions Bot'
           git config --global user.email 'actions-bot@github.com'
-          git add videos.json schedule.json
+          # --- YEH LINE UPDATE HUI HAI ---
+          git add videos.json schedule.json live.json
+          # -----------------------------
           # Check if there are changes to commit
           if ! git diff --staged --quiet; then
             git commit -m "feat: Update video library and schedule from $(date -u +'%Y-%m-%d')"
