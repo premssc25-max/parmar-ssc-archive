@@ -126,34 +126,65 @@ function updateClock() {
     elements.timeValue.textContent = istTime.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const istHour = istTime.getHours();
     const istDay = istTime.getDay();
-    //old tIME
-    //AppState.isLive = (istHour >= 9 && istHour < 11 && istDay > 0 && istDay < 7);
-    //nEW tIME 
     AppState.isLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
     updateLiveStatus();
     updateNextStreamInfo();
 }
 
-function updateLiveStatus() {
+// NEW FUNCTION to find the specific live video ID
+async function fetchAndDisplayLivePlayer() {
     const livePlayerDiv = document.getElementById('livePlayer');
-    if (!elements.liveSection || !elements.offlineMessage || !livePlayerDiv) return;
-    if (AppState.isLive) {
-        elements.liveSection.classList.remove('hidden');
-        elements.offlineMessage.classList.add('hidden');
-        if (livePlayerDiv.querySelector('iframe') === null) {
+    if (!livePlayerDiv || livePlayerDiv.querySelector('iframe')) return; // Stop if player already loaded
+
+    livePlayerDiv.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Finding live stream...</p>';
+
+    try {
+        const channelLiveUrl = 'https://www.youtube.com/@parmarssc/live';
+        // Using a free proxy to bypass browser restrictions
+        const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(channelLiveUrl)}`);
+        if (!response.ok) throw new Error('Network response failed.');
+        
+        const data = await response.json();
+        const htmlContent = data.contents;
+        
+        // Find the specific video ID from the page content
+        const match = htmlContent.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+        
+        if (match && match[1]) {
+            const videoId = match[1];
             const iframe = document.createElement('iframe');
-            iframe.src = "https://www.youtube.com/embed/live_stream?channel=UC4h_7L2n2aC_j-gN-V_f_xw&autoplay=1&mute=1";
+            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`;
             iframe.frameBorder = "0";
             iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
             iframe.allowFullscreen = true;
+            livePlayerDiv.innerHTML = ''; // Clear loading message
             livePlayerDiv.appendChild(iframe);
+        } else {
+            livePlayerDiv.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Live stream not found. It might be private or un-embeddable.</p>';
         }
+    } catch (error) {
+        console.error('Error fetching live stream:', error);
+        livePlayerDiv.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Could not load the live stream player.</p>';
+    }
+}
+
+// UPDATED FUNCTION to call the new logic
+function updateLiveStatus() {
+    if (!elements.liveSection || !elements.offlineMessage) return;
+    
+    if (AppState.isLive) {
+        elements.liveSection.classList.remove('hidden');
+        elements.offlineMessage.classList.add('hidden');
+        // This now calls the new function to find the real link
+        fetchAndDisplayLivePlayer();
     } else {
         elements.liveSection.classList.add('hidden');
         elements.offlineMessage.classList.remove('hidden');
-        livePlayerDiv.innerHTML = '';
+        const livePlayerDiv = document.getElementById('livePlayer');
+        if (livePlayerDiv) livePlayerDiv.innerHTML = ''; // Clear player when offline
     }
 }
+
 
 function updateNextStreamInfo() {
     if (AppState.isLive || !elements.nextStreamInfo) return;
