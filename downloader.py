@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 
 # ---------- SETTINGS ----------
-CHANNEL_STREAMS_URL = "https://www.youtube.com/@parmarssc/streams"
+CHANNEL_URL = "https://www.youtube.com/@parmarssc"
 BASE_PATH = "/tmp/YouTubeClasses"
 RCLONE_REMOTE = "gdrive"
 
@@ -20,13 +20,13 @@ def get_subject_from_title(title):
             return s.capitalize()
     return "Others"
 
-# ---------- SCRAPE UPCOMING STREAMS ----------
+# ---------- SCRAPE UPCOMING STREAChMS ----------
 def scrape_upcoming_streams():
     upcoming_streams = []
     try:
         ydl_opts = {'dump_single_json': True, 'quiet': True, 'extract_flat': 'in_playlist'}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            playlist_dict = ydl.extract_info(CHANNEL_STREAMS_URL, download=False)
+            playlist_dict = ydl.extract_info(f"{CHANNEL_URL}/streams", download=False)
             for video in playlist_dict.get('entries', []):
                 if not video.get('is_live') and video.get('release_timestamp') and video.get('release_timestamp') > time.time():
                     stream_info = {
@@ -38,23 +38,6 @@ def scrape_upcoming_streams():
             return upcoming_streams
     except Exception: return []
 
-# ---------- FIND CURRENT LIVE STREAM ----------
-def resolve_current_live_url():
-    try:
-        live_page_url = CHANNEL_STREAMS_URL.replace("/streams", "/live")
-        r = requests.get(live_page_url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
-        r.raise_for_status()
-        match = re.search(r'"videoId":"([\w-]{11})"', r.text)
-        if match: return f"https://www.youtube.com/watch?v={match.group(1)}"
-    except Exception: return None
-
-def fetch_live_info(url):
-    try:
-        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "dump_single_json": True}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info and info.get("is_live"): return info
-    except Exception: return None
-
 # --- UPLOAD TO GOOGLE DRIVE (rclone version) ---
 def upload_to_drive(local_path, subject):
     if not os.path.exists(local_path):
@@ -62,19 +45,17 @@ def upload_to_drive(local_path, subject):
     
     remote_path_folder = f"{RCLONE_REMOTE}:Parmar_SSC_Classes/{subject}"
     file_name = os.path.basename(local_path)
-    remote_path_full = f"{remote_path_folder}/{file_name}"
-
+    
     try:
         subprocess.run(["rclone", "mkdir", remote_path_folder], check=True, capture_output=True, text=True)
         print(f"☁️ Uploading '{file_name}' to Google Drive...")
         subprocess.run(["rclone", "move", local_path, remote_path_folder, "--progress", "--drive-chunk-size", "64M"], check=True, capture_output=True, text=True)
         print("✅ Upload successful.")
         
-        result = subprocess.run(["rclone", "lsjson", remote_path_full], check=True, capture_output=True, text=True)
+        result = subprocess.run(["rclone", "lsjson", f"{remote_path_folder}/{file_name}"], check=True, capture_output=True, text=True)
         file_info = json.loads(result.stdout)
         file_id = file_info[0]['ID']
         
-        # --- RETURN FULL PREVIEW URL ---
         return f"https://drive.google.com/file/d/{file_id}/preview" 
 
     except Exception as e:
@@ -87,7 +68,6 @@ def download_live(url, info):
     folder = os.path.join(BASE_PATH, subject)
     os.makedirs(folder, exist_ok=True)
     sanitized_title = re.sub(r'[\\/:*?"<>|]', "", title)
-    # --- UPDATED FORMAT FOR BETTER COMPATIBILITY ---
     ydl_opts = {"outtmpl": os.path.join(folder, f"{sanitized_title} [%(id)s].%(ext)s"), "format": "bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]", "live_from_start": True, "ignoreerrors": True, "no_warnings": True, "fragment_retries": 50, "retries": 20}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -97,40 +77,59 @@ def download_live(url, info):
             for ext in ['.mp4', '.mkv', '.webm']:
                 if os.path.exists(base_path_without_ext + ext):
                     file_path = base_path_without_ext + ext; break
-            else: return None, None, None
-        return file_path, subject, info
+            else: return None
+        return file_path
     except Exception as e:
         print(f"⚠️ Download error: {e}")
-        return None, None, None
+        return None
 
 def main():
+    # Update schedule file
     upcoming_schedule = scrape_upcoming_streams()
-    with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f, indent=2) # Added indent for readability
+    with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f, indent=2)
     print("💾 schedule.json has been updated.")
     
+    # --- NEW, MORE RELIABLE LIVE VIDEO DETECTION ---
+    live_info = None
+    try:
+        with yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'dump_single_json': True}) as ydl:
+            info = ydl.extract_info(f"{CHANNEL_URL}/live", download=False)
+            if info and info.get('is_live'):
+                live_info = info
+    except Exception:
+        print("ℹ️ yt-dlp did not find a live video (this is normal if no stream is live).")
+    # --- END OF NEW DETECTION ---
+
     new_video_json = None
-    live_video_id = None # <-- Nayi line: Live video ID store karne ke liye
+    live_video_id = None
     
-    live_url = resolve_current_live_url()
-    if live_url:
-        info = fetch_live_info(live_url)
-        if info:
-            live_video_id = info.get("id") # <-- Nayi line: Live video ID assign kiya
-            file_path, subject, video_info = download_live(live_url, info)
-            if file_path and subject and video_info:
-                gdrive_url = upload_to_drive(file_path, subject) # <-- gdrive_url return ho raha hai ab
-                if gdrive_url:
-                    new_video_data = {"id": video_info.get("id"),"title": video_info.get("title"),"duration": time.strftime('%H:%M:%S', time.gmtime(video_info.get("duration", 0))),"uploadDate": datetime.now().strftime('%Y-%m-%d'),"startTime": "09:00","subject": subject,"gdrive_url": gdrive_url} # <-- gdrive_url istemal kiya
-                    new_video_json = json.dumps(new_video_data)
+    if live_info:
+        live_video_id = live_info.get("id")
+        live_url = live_info.get("webpage_url")
+        print(f"✅ Live stream found: {live_info.get('title')}")
+        
+        file_path = download_live(live_url, live_info)
+        if file_path:
+            subject = get_subject_from_title(live_info.get("title"))
+            gdrive_url = upload_to_drive(file_path, subject)
+            if gdrive_url:
+                new_video_data = {
+                    "id": live_info.get("id"),
+                    "title": live_info.get("title"),
+                    "duration": time.strftime('%H:%M:%S', time.gmtime(live_info.get("duration", 0))),
+                    "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                    "startTime": "09:00", # Placeholder, can be improved if needed
+                    "subject": subject,
+                    "gdrive_url": gdrive_url
+                }
+                new_video_json = json.dumps(new_video_data)
     else:
         print("ℹ️ No stream is currently live.")
     
-    # --- NAYA PART START: live.json ko update karein ---
-    live_data = {"liveVideoId": live_video_id}
+    # Update live.json regardless
     with open('live.json', 'w') as f:
-        json.dump(live_data, f)
+        json.dump({"liveVideoId": live_video_id}, f)
     print("💾 live.json has been updated.")
-    # --- NAYA PART END ---
         
     print(f"\n::set-output name=new_video_json::{new_video_json or 'null'}")
 
