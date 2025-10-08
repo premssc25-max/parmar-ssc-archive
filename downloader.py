@@ -34,8 +34,8 @@ def scrape_upcoming_streams():
                         "startTime": datetime.fromtimestamp(video.get('release_timestamp'), tz=timezone.utc).isoformat()
                     }
                     upcoming_streams.append(stream_info)
-        upcoming_streams.sort(key=lambda x: x['startTime'])
-        return upcoming_streams
+            upcoming_streams.sort(key=lambda x: x['startTime'])
+            return upcoming_streams
     except Exception: return []
 
 # ---------- FIND CURRENT LIVE STREAM ----------
@@ -74,7 +74,7 @@ def upload_to_drive(local_path, subject):
         file_info = json.loads(result.stdout)
         file_id = file_info[0]['ID']
         
-        return file_id # Return just the ID
+        return f"https://drive.google.com/file/d/{file_id}/preview" # Return full preview URL
 
     except Exception as e:
         print(f"⚠️ An error occurred during upload: {e}")
@@ -86,7 +86,7 @@ def download_live(url, info):
     folder = os.path.join(BASE_PATH, subject)
     os.makedirs(folder, exist_ok=True)
     sanitized_title = re.sub(r'[\\/:*?"<>|]', "", title)
-    ydl_opts = {"outtmpl": os.path.join(folder, f"{sanitized_title} [%(id)s].%(ext)s"), "format": "bestvideo[height<=720]+bestaudio[ext=m4a]/best", "live_from_start": True, "ignoreerrors": True, "no_warnings": True, "fragment_retries": 50, "retries": 20}
+    ydl_opts = {"outtmpl": os.path.join(folder, f"{sanitized_title} [%(id)s].%(ext)s"), "format": "bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]", "live_from_start": True, "ignoreerrors": True, "no_warnings": True, "fragment_retries": 50, "retries": 20}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=True)
@@ -96,29 +96,40 @@ def download_live(url, info):
                 if os.path.exists(base_path_without_ext + ext):
                     file_path = base_path_without_ext + ext; break
             else: return None, None, None
-        return file_path, subject, info
+            return file_path, subject, info
     except Exception as e:
         print(f"⚠️ Download error: {e}")
         return None, None, None
 
 def main():
     upcoming_schedule = scrape_upcoming_streams()
-    with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f)
+    with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f, indent=2)
     print("💾 schedule.json has been updated.")
     
     new_video_json = None
+    live_video_id = None # <-- NAYI LINE
+    
     live_url = resolve_current_live_url()
     if live_url:
         info = fetch_live_info(live_url)
         if info:
+            live_video_id = info.get("id") # <-- NAYI LINE
             file_path, subject, video_info = download_live(live_url, info)
             if file_path and subject and video_info:
-                gdrive_file_id = upload_to_drive(file_path, subject)
-                if gdrive_file_id:
-                    new_video_data = {"id": video_info.get("id"),"title": video_info.get("title"),"duration": time.strftime('%H:%M:%S', time.gmtime(video_info.get("duration", 0))),"uploadDate": datetime.now().strftime('%Y-%m-%d'),"startTime": "09:00","subject": subject,"gdrive_id": gdrive_file_id}
+                gdrive_url = upload_to_drive(file_path, subject)
+                if gdrive_url:
+                    new_video_data = {"id": video_info.get("id"),"title": video_info.get("title"),"duration": time.strftime('%H:%M:%S', time.gmtime(video_info.get("duration", 0))),"uploadDate": datetime.now().strftime('%Y-%m-%d'),"startTime": "09:00","subject": subject,"gdrive_url": gdrive_url}
                     new_video_json = json.dumps(new_video_data)
     else:
         print("ℹ️ No stream is currently live.")
+    
+    # --- NAYA PART START ---
+    # live.json file ko update karein
+    live_data = {"liveVideoId": live_video_id}
+    with open('live.json', 'w') as f:
+        json.dump(live_data, f)
+    print("💾 live.json has been updated.")
+    # --- NAYA PART END ---
         
     print(f"\n::set-output name=new_video_json::{new_video_json or 'null'}")
 
