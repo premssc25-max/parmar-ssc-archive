@@ -1,12 +1,13 @@
 // Application State
 const AppState = {
     isLive: false,
+    liveVideoId: null, // <-- Naya state live video ID ke liye
     currentSubject: null,
     searchQuery: '',
     sortBy: 'latest',
     theme: 'light',
     videos: {},
-    schedule: [], // Will be populated from schedule.json
+    schedule: [],
     filteredVideos: [],
     clockInterval: null
 };
@@ -45,17 +46,20 @@ const elements = {
 
 // Initialize Application
 function initApp() {
+    // Ab yeh 3 files ko load karega
     Promise.all([
         fetch('videos.json').then(res => res.json()),
-        fetch('schedule.json').then(res => res.json())
+        fetch('schedule.json').then(res => res.json()),
+        fetch('live.json').then(res => res.json()) // <-- live.json ko fetch karega
     ])
-    .then(([videoData, scheduleData]) => {
+    .then(([videoData, scheduleData, liveData]) => { // <-- liveData yahan aa gaya
         AppState.videos = {};
         videoData.forEach(video => {
             if (!AppState.videos[video.subject]) AppState.videos[video.subject] = [];
             AppState.videos[video.subject].push(video);
         });
         AppState.schedule = scheduleData;
+        AppState.liveVideoId = liveData.liveVideoId; // <-- Live video ID save ho gaya
 
         populateSubjectTabs();
         loadUserPreferences();
@@ -122,69 +126,53 @@ function startClock() {
 
 function updateClock() {
     const now = new Date();
-    const istTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const istTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolata" }));
     elements.timeValue.textContent = istTime.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const istHour = istTime.getHours();
     const istDay = istTime.getDay();
-    AppState.isLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
+    
+    // Time window check
+    const isTimeForLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
+    
+    // Is live only if time is right AND we have a video ID from live.json
+    AppState.isLive = isTimeForLive && AppState.liveVideoId;
+    
     updateLiveStatus();
     updateNextStreamInfo();
 }
 
-// NEW FUNCTION to find the specific live video ID
-async function fetchAndDisplayLivePlayer() {
+// --- YEH POORA FUNCTION UPDATE HUA HAI ---
+function updateLiveStatus() {
     const livePlayerDiv = document.getElementById('livePlayer');
-    if (!livePlayerDiv || livePlayerDiv.querySelector('iframe')) return; // Stop if player already loaded
+    if (!elements.liveSection || !elements.offlineMessage || !livePlayerDiv) return;
 
-    livePlayerDiv.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Finding live stream...</p>';
-
-    try {
-        const channelLiveUrl = 'https://www.youtube.com/@parmarssc/live';
-        // Using a free proxy to bypass browser restrictions
-        const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(channelLiveUrl)}`);
-        if (!response.ok) throw new Error('Network response failed.');
+    if (AppState.isLive) {
+        elements.statusDot.classList.remove('offline');
+        elements.statusText.textContent = "LIVE";
+        elements.liveSection.classList.remove('hidden');
+        elements.offlineMessage.classList.add('hidden');
         
-        const data = await response.json();
-        const htmlContent = data.contents;
+        // Player ko tabhi load karein jab woh pehle se loaded na ho
+        const existingIframe = livePlayerDiv.querySelector('iframe');
+        const expectedSrc = `https://www.youtube.com/embed/${AppState.liveVideoId}?autoplay=1&mute=1`;
         
-        // Find the specific video ID from the page content
-        const match = htmlContent.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-        
-        if (match && match[1]) {
-            const videoId = match[1];
+        if (!existingIframe || existingIframe.src !== expectedSrc) {
             const iframe = document.createElement('iframe');
-            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`;
+            iframe.src = expectedSrc;
             iframe.frameBorder = "0";
             iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
             iframe.allowFullscreen = true;
-            livePlayerDiv.innerHTML = ''; // Clear loading message
+            livePlayerDiv.innerHTML = ''; // Purana content saaf karein
             livePlayerDiv.appendChild(iframe);
-        } else {
-            livePlayerDiv.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Live stream not found. It might be private or un-embeddable.</p>';
         }
-    } catch (error) {
-        console.error('Error fetching live stream:', error);
-        livePlayerDiv.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Could not load the live stream player.</p>';
-    }
-}
-
-// UPDATED FUNCTION to call the new logic
-function updateLiveStatus() {
-    if (!elements.liveSection || !elements.offlineMessage) return;
-    
-    if (AppState.isLive) {
-        elements.liveSection.classList.remove('hidden');
-        elements.offlineMessage.classList.add('hidden');
-        // This now calls the new function to find the real link
-        fetchAndDisplayLivePlayer();
     } else {
+        elements.statusDot.classList.add('offline');
+        elements.statusText.textContent = "OFFLINE";
         elements.liveSection.classList.add('hidden');
         elements.offlineMessage.classList.remove('hidden');
-        const livePlayerDiv = document.getElementById('livePlayer');
-        if (livePlayerDiv) livePlayerDiv.innerHTML = ''; // Clear player when offline
+        livePlayerDiv.innerHTML = ''; // Player saaf karein
     }
 }
-
 
 function updateNextStreamInfo() {
     if (AppState.isLive || !elements.nextStreamInfo) return;
@@ -296,13 +284,10 @@ function openVideoModal(video) {
 
     const player = document.getElementById('modalPlayer');
 
-    // Show loading indicator
     elements.loadingIndicator.classList.remove('hidden');
 
-    // Set the iframe src to the Google Drive preview URL
     if (video.gdrive_url) {
         player.src = video.gdrive_url;
-        // Hide loading when iframe loads
         player.onload = () => {
             elements.loadingIndicator.classList.add('hidden');
         };
