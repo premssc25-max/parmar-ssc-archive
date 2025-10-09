@@ -39,6 +39,8 @@ jobs:
         
       - name: Run Scraper and Downloader
         id: downloader
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           python downloader.py
 
