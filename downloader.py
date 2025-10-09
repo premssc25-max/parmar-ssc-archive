@@ -8,7 +8,8 @@ import json
 from datetime import datetime, timezone
 
 # ---------- SETTINGS ----------
-CHANNEL_URL = "https://www.youtube.com/@parmarssc"
+#https://www.youtube.com/@parmarssc
+CHANNEL_URL = "https://www.youtube.com/@LofiGirl"
 BASE_PATH = "/tmp/YouTubeClasses"
 RCLONE_REMOTE = "gdrive"
 
