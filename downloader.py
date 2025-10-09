@@ -20,7 +20,7 @@ def get_subject_from_title(title):
             return s.capitalize()
     return "Others"
 
-# ---------- SCRAPE UPCOMING STREAChMS ----------
+# ---------- SCRAPE UPCOMING STREAMS ----------
 def scrape_upcoming_streams():
     upcoming_streams = []
     try:
@@ -84,21 +84,23 @@ def download_live(url, info):
         return None
 
 def main():
-    # Update schedule file
     upcoming_schedule = scrape_upcoming_streams()
     with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f, indent=2)
     print("💾 schedule.json has been updated.")
     
-    # --- NEW, MORE RELIABLE LIVE VIDEO DETECTION ---
     live_info = None
     try:
         with yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'dump_single_json': True}) as ydl:
             info = ydl.extract_info(f"{CHANNEL_URL}/live", download=False)
             if info and info.get('is_live'):
                 live_info = info
-    except Exception:
-        print("ℹ️ yt-dlp did not find a live video (this is normal if no stream is live).")
-    # --- END OF NEW DETECTION ---
+    # --- UPDATED ERROR LOGGING ---
+    except Exception as e:
+        print("--- DETAILED ERROR ---")
+        print("An error occurred while trying to find the live video with yt-dlp.")
+        print(f"Error details: {e}")
+        print("--------------------")
+    # --- END OF UPDATE ---
 
     new_video_json = None
     live_video_id = None
@@ -118,7 +120,7 @@ def main():
                     "title": live_info.get("title"),
                     "duration": time.strftime('%H:%M:%S', time.gmtime(live_info.get("duration", 0))),
                     "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
-                    "startTime": "09:00", # Placeholder, can be improved if needed
+                    "startTime": "09:00",
                     "subject": subject,
                     "gdrive_url": gdrive_url
                 }
@@ -126,7 +128,6 @@ def main():
     else:
         print("ℹ️ No stream is currently live.")
     
-    # Update live.json regardless
     with open('live.json', 'w') as f:
         json.dump({"liveVideoId": live_video_id}, f)
     print("💾 live.json has been updated.")
