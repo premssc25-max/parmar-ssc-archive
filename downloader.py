@@ -22,11 +22,15 @@ def get_subject_from_title(title):
 
 # --- SCRAPE UPCOMING STREAMS ---
 def scrape_upcoming_streams():
-    # This part does not need cookies
-    # ... (rest of the function is unchanged)
     upcoming_streams = []
+    # This part now also uses cookies
+    ydl_opts = {
+        'dump_single_json': True,
+        'quiet': True,
+        'extract_flat': 'in_playlist',
+        'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None
+    }
     try:
-        ydl_opts = {'dump_single_json': True, 'quiet': True, 'extract_flat': 'in_playlist'}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             playlist_dict = ydl.extract_info(f"{CHANNEL_URL}/streams", download=False)
             for video in playlist_dict.get('entries', []):
@@ -37,12 +41,12 @@ def scrape_upcoming_streams():
                     }
                     upcoming_streams.append(stream_info)
             upcoming_streams.sort(key=lambda x: x['startTime'])
-            return upcoming_streams
-    except Exception: return []
+    except Exception as e:
+        print(f"⚠️ Could not scrape upcoming streams: {e}")
+    return upcoming_streams
 
 # --- UPLOAD TO GOOGLE DRIVE ---
 def upload_to_drive(local_path, subject):
-    # ... (this function is unchanged)
     if not os.path.exists(local_path):
         return None
     
@@ -67,8 +71,6 @@ def upload_to_drive(local_path, subject):
 
 # --- DOWNLOAD LIVE VIDEO ---
 def download_live(url, info):
-    # This function now needs the cookie file
-    # ... (rest of the function is mostly unchanged)
     title = info.get("title", "Unknown Live Class")
     subject = get_subject_from_title(title)
     folder = os.path.join(BASE_PATH, subject)
@@ -82,13 +84,12 @@ def download_live(url, info):
         "no_warnings": True,
         "fragment_retries": 50,
         "retries": 20,
-        "cookiefile": COOKIES_FILE # Use cookies for downloading
+        "cookiefile": COOKIES_FILE
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(url, download=True)
-            # Since download=True, we don't need to find the filename, rclone will move it
-            return os.path.join(folder, ydl.prepare_filename(info))
+            info_dict = ydl.extract_info(url, download=True)
+            return ydl.prepare_filename(info_dict)
     except Exception as e:
         print(f"⚠️ Download error: {e}")
         return None
@@ -103,9 +104,8 @@ def main():
         print("🍪 YouTube cookies file created.")
     else:
         print("⚠️ YOUTUBE_COOKIES secret not found.")
-
-    # ... (rest of the function is updated to use cookies)
     
+    # Update schedule file
     upcoming_schedule = scrape_upcoming_streams()
     with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f, indent=2)
     print("💾 schedule.json has been updated.")
@@ -136,13 +136,8 @@ def main():
         live_url = live_info.get("webpage_url")
         print(f"✅ Live stream found: {live_info.get('title')}")
         
-        # Download requires the original info dict to prepare filename
-        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-             info_for_filename = ydl.extract_info(live_url, download=False)
-        
-        file_path = download_live(live_url, info_for_filename)
+        file_path = download_live(live_url, live_info)
         if file_path:
-             # Find the actual downloaded file, as the prepared name can be tricky
             downloaded_file = None
             base_path_without_ext = os.path.splitext(file_path)[0]
             for ext in ['.mp4', '.mkv', '.webm']:
