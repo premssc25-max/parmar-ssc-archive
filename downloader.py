@@ -2,18 +2,17 @@ import os
 import re
 import time
 import yt_dlp
-import requests
 import subprocess
 import json
 from datetime import datetime, timezone
 
-# ---------- SETTINGS ----------
-#https://www.youtube.com/@parmarssc
-CHANNEL_URL = "https://www.youtube.com/@LofiGirl"
+# --- SETTINGS ---
+CHANNEL_URL = "https://www.youtube.com/@parmarssc"
 BASE_PATH = "/tmp/YouTubeClasses"
 RCLONE_REMOTE = "gdrive"
+COOKIES_FILE = "/tmp/cookies.txt"
 
-# ---------- SUBJECT DETECTION ----------
+# --- SUBJECT DETECTION ---
 def get_subject_from_title(title):
     subjects = ["Geography", "Polity", "Economy", "History", "Science", "Maths", "English", "Reasoning"]
     for s in subjects:
@@ -21,8 +20,10 @@ def get_subject_from_title(title):
             return s.capitalize()
     return "Others"
 
-# ---------- SCRAPE UPCOMING STREAMS ----------
+# --- SCRAPE UPCOMING STREAMS ---
 def scrape_upcoming_streams():
+    # This part does not need cookies
+    # ... (rest of the function is unchanged)
     upcoming_streams = []
     try:
         ydl_opts = {'dump_single_json': True, 'quiet': True, 'extract_flat': 'in_playlist'}
@@ -39,8 +40,9 @@ def scrape_upcoming_streams():
             return upcoming_streams
     except Exception: return []
 
-# --- UPLOAD TO GOOGLE DRIVE (rclone version) ---
+# --- UPLOAD TO GOOGLE DRIVE ---
 def upload_to_drive(local_path, subject):
+    # ... (this function is unchanged)
     if not os.path.exists(local_path):
         return None
     
@@ -63,45 +65,68 @@ def upload_to_drive(local_path, subject):
         print(f"⚠️ An error occurred during upload: {e}")
         return None
 
+# --- DOWNLOAD LIVE VIDEO ---
 def download_live(url, info):
+    # This function now needs the cookie file
+    # ... (rest of the function is mostly unchanged)
     title = info.get("title", "Unknown Live Class")
     subject = get_subject_from_title(title)
     folder = os.path.join(BASE_PATH, subject)
     os.makedirs(folder, exist_ok=True)
     sanitized_title = re.sub(r'[\\/:*?"<>|]', "", title)
-    ydl_opts = {"outtmpl": os.path.join(folder, f"{sanitized_title} [%(id)s].%(ext)s"), "format": "bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]", "live_from_start": True, "ignoreerrors": True, "no_warnings": True, "fragment_retries": 50, "retries": 20}
+    ydl_opts = {
+        "outtmpl": os.path.join(folder, f"{sanitized_title} [%(id)s].%(ext)s"),
+        "format": "bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]",
+        "live_from_start": True,
+        "ignoreerrors": True,
+        "no_warnings": True,
+        "fragment_retries": 50,
+        "retries": 20,
+        "cookiefile": COOKIES_FILE # Use cookies for downloading
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info_dict)
-            base_path_without_ext = os.path.splitext(file_path)[0]
-            for ext in ['.mp4', '.mkv', '.webm']:
-                if os.path.exists(base_path_without_ext + ext):
-                    file_path = base_path_without_ext + ext; break
-            else: return None
-        return file_path
+            ydl.extract_info(url, download=True)
+            # Since download=True, we don't need to find the filename, rclone will move it
+            return os.path.join(folder, ydl.prepare_filename(info))
     except Exception as e:
         print(f"⚠️ Download error: {e}")
         return None
 
+# --- MAIN FUNCTION ---
 def main():
+    # Create cookies file from GitHub Secret
+    youtube_cookies = os.environ.get('YOUTUBE_COOKIES')
+    if youtube_cookies:
+        with open(COOKIES_FILE, 'w') as f:
+            f.write(youtube_cookies)
+        print("🍪 YouTube cookies file created.")
+    else:
+        print("⚠️ YOUTUBE_COOKIES secret not found.")
+
+    # ... (rest of the function is updated to use cookies)
+    
     upcoming_schedule = scrape_upcoming_streams()
     with open('schedule.json', 'w') as f: json.dump(upcoming_schedule, f, indent=2)
     print("💾 schedule.json has been updated.")
     
     live_info = None
+    ydl_opts_live = {
+        'quiet': True,
+        'skip_download': True,
+        'dump_single_json': True,
+        'cookiefile': COOKIES_FILE if youtube_cookies else None
+    }
+
     try:
-        with yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'dump_single_json': True}) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_live) as ydl:
             info = ydl.extract_info(f"{CHANNEL_URL}/live", download=False)
             if info and info.get('is_live'):
                 live_info = info
-    # --- UPDATED ERROR LOGGING ---
     except Exception as e:
         print("--- DETAILED ERROR ---")
-        print("An error occurred while trying to find the live video with yt-dlp.")
-        print(f"Error details: {e}")
+        print(f"Error finding live video: {e}")
         print("--------------------")
-    # --- END OF UPDATE ---
 
     new_video_json = None
     live_video_id = None
@@ -111,21 +136,35 @@ def main():
         live_url = live_info.get("webpage_url")
         print(f"✅ Live stream found: {live_info.get('title')}")
         
-        file_path = download_live(live_url, live_info)
+        # Download requires the original info dict to prepare filename
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+             info_for_filename = ydl.extract_info(live_url, download=False)
+        
+        file_path = download_live(live_url, info_for_filename)
         if file_path:
-            subject = get_subject_from_title(live_info.get("title"))
-            gdrive_url = upload_to_drive(file_path, subject)
-            if gdrive_url:
-                new_video_data = {
-                    "id": live_info.get("id"),
-                    "title": live_info.get("title"),
-                    "duration": time.strftime('%H:%M:%S', time.gmtime(live_info.get("duration", 0))),
-                    "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
-                    "startTime": "09:00",
-                    "subject": subject,
-                    "gdrive_url": gdrive_url
-                }
-                new_video_json = json.dumps(new_video_data)
+             # Find the actual downloaded file, as the prepared name can be tricky
+            downloaded_file = None
+            base_path_without_ext = os.path.splitext(file_path)[0]
+            for ext in ['.mp4', '.mkv', '.webm']:
+                potential_file = base_path_without_ext + ext
+                if os.path.exists(potential_file):
+                    downloaded_file = potential_file
+                    break
+
+            if downloaded_file:
+                subject = get_subject_from_title(live_info.get("title"))
+                gdrive_url = upload_to_drive(downloaded_file, subject)
+                if gdrive_url:
+                    new_video_data = {
+                        "id": live_info.get("id"),
+                        "title": live_info.get("title"),
+                        "duration": time.strftime('%H:%M:%S', time.gmtime(live_info.get("duration", 0))),
+                        "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                        "startTime": "09:00",
+                        "subject": subject,
+                        "gdrive_url": gdrive_url
+                    }
+                    new_video_json = json.dumps(new_video_data)
     else:
         print("ℹ️ No stream is currently live.")
     
