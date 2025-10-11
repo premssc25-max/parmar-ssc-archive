@@ -40,13 +40,14 @@ jobs:
       - name: Run Scraper and Downloader
         id: downloader
         env:
-          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+          # --- THIS PART IS NOW CORRECTED ---
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           python downloader.py
 
       - name: Update videos.json database
         id: update_videos
-        if: fromJson(steps.downloader.outputs.new_video_json) != null
+        if: steps.downloader.outputs.new_video_json != '' && steps.downloader.outputs.new_video_json != 'null'
         run: |
           jq --argjson newVideo '${{ steps.downloader.outputs.new_video_json }}' '. + [$newVideo]' videos.json > temp.json && mv temp.json videos.json
 
@@ -54,10 +55,7 @@ jobs:
         run: |
           git config --global user.name 'GitHub Actions Bot'
           git config --global user.email 'actions-bot@github.com'
-          # --- YEH LINE UPDATE HUI HAI ---
           git add videos.json schedule.json live.json
-          # -----------------------------
-          # Check if there are changes to commit
           if ! git diff --staged --quiet; then
             git commit -m "feat: Update video library and schedule from $(date -u +'%Y-%m-%d')"
             git push
