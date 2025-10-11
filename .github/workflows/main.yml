@@ -3,7 +3,6 @@ name: Parmar SSC Daily Downloader
 on:
   workflow_dispatch:
   schedule:
-    # UPDATED: Runs every 15 mins between 3:15 and 6:15 UTC (8:45 AM - 11:45 AM IST)
     - cron: '15,30,45 3 * * 1-6'
     - cron: '0,15,30,45 4 * * 1-6'
     - cron: '0,15,30,45 5 * * 1-6'
@@ -30,7 +29,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install yt-dlp requests
-          sudo apt-get update && sudo apt-get install -y rclone jq
+          sudo apt-get update && sudo apt-get install -y rclone jq gh
 
       - name: Configure rclone
         run: |
@@ -40,8 +39,8 @@ jobs:
       - name: Run Scraper and Downloader
         id: downloader
         env:
-          # --- THIS PART IS NOW CORRECTED ---
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           python downloader.py
 
@@ -57,8 +56,16 @@ jobs:
           git config --global user.email 'actions-bot@github.com'
           git add videos.json schedule.json live.json
           if ! git diff --staged --quiet; then
-            git commit -m "feat: Update video library and schedule from $(date -u +'%Y-%m-%d')"
+            git commit -m "feat: Update video library and schedule"
             git push
           else
             echo "No changes to commit."
           fi
+          
+      # --- NEW NOTIFICATION STEP ---
+      - name: Create Issue on Authentication Failure
+        if: steps.downloader.outputs.auth_error == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --title "Action Required: YouTube Cookies Have Expired" --body "The automatic downloader failed because the YouTube cookies are no longer valid. Please update the YOUTUBE_COOKIES secret in your repository settings to ensure future classes are recorded. This is a manual step that needs to be done every few days."
