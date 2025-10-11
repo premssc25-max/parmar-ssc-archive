@@ -787,11 +787,11 @@ select.form-control {
 }
 
 .live-player {
-    position: relative;
-    width: 100%;
-    height: 0;
-    padding-bottom: 56.25%; /* 16:9 aspect ratio */
-    background-color: var(--color-black);
+   position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 45%; /* A wider, shorter ratio */
+  background-color: var(--color-black);
 }
 
 .live-player iframe {
