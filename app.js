@@ -1,372 +1,71 @@
-// Application State
-const AppState = {
-    isLive: false,
-    liveVideoId: null, // For storing the specific live video ID
-    livePlayerSrc: null, // To store the live player URL temporarily
-    currentSubject: null,
-    searchQuery: '',
-    sortBy: 'latest',
-    theme: 'light',
-    videos: {},
-    schedule: [],
-    filteredVideos: [],
-    clockInterval: null
-};
+name: Parmar SSC Daily Downloader
 
-// DOM Elements
-const elements = {
-    liveStatus: document.getElementById('liveStatus'),
-    statusDot: document.getElementById('statusDot'),
-    statusText: document.getElementById('statusText'),
-    currentTime: document.getElementById('currentTime'),
-    timeValue: document.getElementById('timeValue'),
-    liveSection: document.getElementById('liveSection'),
-    offlineMessage: document.getElementById('offlineMessage'),
-    videoLibrary: document.getElementById('videoLibrary'),
-    videoGrid: document.getElementById('videoGrid'),
-    searchInput: document.getElementById('searchInput'),
-    searchBtn: document.getElementById('searchBtn'),
-    refreshBtn: document.getElementById('refreshBtn'),
-    themeToggle: document.getElementById('themeToggle'),
-    sortSelect: document.getElementById('sortSelect'),
-    subjectTabsContainer: document.getElementById('subjectTabsContainer'),
-    videoModal: document.getElementById('videoModal'),
-    modalOverlay: document.getElementById('modalOverlay'),
-    modalClose: document.getElementById('modalClose'),
-    modalTitle: document.getElementById('modalTitle'),
-    modalDuration: document.getElementById('modalDuration'),
-    modalDate: document.getElementById('modalDate'),
-    modalStartTime: document.getElementById('modalStartTime'),
-    noResults: document.getElementById('noResults'),
-    nextStreamInfo: document.getElementById('nextStreamInfo'),
-    nextStreamDay: document.getElementById('nextStreamDay'),
-    nextStreamSubject: document.getElementById('nextStreamSubject'),
-    countdownValue: document.getElementById('countdownValue'),
-    loadingIndicator: document.getElementById('loadingIndicator'),
-    recordingStatus: document.getElementById('recordingStatus')
-};
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15,30,45 3 * * 1-6'
+    - cron: '0,15,30,45 4 * * 1-6'
+    - cron: '0,15,30,45 5 * * 1-6'
+    - cron: '0,15 6 * * 1-6'
 
-// Initialize Application
-function initApp() {
-    Promise.all([
-        fetch('videos.json').then(res => res.json()),
-        fetch('schedule.json').then(res => res.json()),
-        fetch('live.json').then(res => res.json()) 
-    ])
-    .then(([videoData, scheduleData, liveData]) => {
-        AppState.videos = {};
-        videoData.forEach(video => {
-            if (!AppState.videos[video.subject]) AppState.videos[video.subject] = [];
-            AppState.videos[video.subject].push(video);
-        });
-        AppState.schedule = scheduleData;
-        AppState.liveVideoId = liveData.liveVideoId;
+jobs:
+  download-and-upload:
+    runs-on: ubuntu-latest
+    outputs:
+      new_video_json: ${{ steps.downloader.outputs.new_video_json }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-        populateSubjectTabs();
-        loadUserPreferences();
-        setupEventListeners();
-        startClock();
-    })
-    .catch(error => {
-        console.error("Could not load initial data:", error);
-        elements.videoLibrary.innerHTML = `<p style="text-align:center;">Could not load page data. Please try again later.</p>`;
-    });
-}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-function populateSubjectTabs() {
-    elements.subjectTabsContainer.innerHTML = '';
-    const subjects = Object.keys(AppState.videos);
-    if (subjects.length === 0) {
-        elements.subjectTabsContainer.innerHTML = '<p>No video subjects found in the library.</p>';
-        return;
-    }
-    AppState.currentSubject = subjects[0];
-    subjects.forEach(subject => {
-        const button = document.createElement('button');
-        button.className = 'tab-button';
-        button.dataset.subject = subject;
-        button.textContent = subject;
-        if (subject === AppState.currentSubject) button.classList.add('active');
-        button.addEventListener('click', () => handleSubjectChange(subject));
-        elements.subjectTabsContainer.appendChild(button);
-    });
-    filterAndDisplayVideos();
-}
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yt-dlp requests
+          sudo apt-get update && sudo apt-get install -y rclone jq gh
 
-function loadUserPreferences() {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    AppState.theme = localStorage.getItem('theme') || (prefersDark ? 'dark' : 'light');
-    applyTheme();
-}
-
-function applyTheme() {
-    document.documentElement.setAttribute('data-color-scheme', AppState.theme);
-    updateThemeToggleIcon();
-}
-
-function updateThemeToggleIcon() {
-    const icon = AppState.theme === 'dark' ? '🌙' : '☀️';
-    elements.themeToggle.innerHTML = `${icon} Theme`;
-}
-
-function setupEventListeners() {
-    elements.searchInput.addEventListener('input', handleSearch);
-    elements.searchBtn.addEventListener('click', handleSearch);
-    elements.refreshBtn.addEventListener('click', () => location.reload());
-    elements.themeToggle.addEventListener('click', toggleTheme);
-    elements.sortSelect.addEventListener('change', handleSortChange);
-    elements.modalClose.addEventListener('click', closeVideoModal);
-    elements.modalOverlay.addEventListener('click', closeVideoModal);
-    document.addEventListener('keydown', e => e.key === 'Escape' && closeVideoModal());
-}
-
-function startClock() {
-    updateClock();
-    AppState.clockInterval = setInterval(updateClock, 1000);
-}
-
-function updateClock() {
-    const now = new Date();
-    const istTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-    elements.timeValue.textContent = istTime.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const istHour = istTime.getHours();
-    const istDay = istTime.getDay();
-    
-    const isTimeForLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
-    AppState.isLive = isTimeForLive && AppState.liveVideoId;
-    
-    updateLiveStatus();
-    updateNextStreamInfo();
-}
-
-// THIS FUNCTION CONTAINS THE UPDATED MESSAGE
-function updateLiveStatus() {
-    const livePlayerDiv = document.getElementById('livePlayer');
-    if (!elements.liveSection || !elements.offlineMessage || !livePlayerDiv) return;
-
-    if (AppState.isLive) {
-        elements.statusDot.classList.remove('offline');
-        elements.statusText.textContent = "LIVE";
-        elements.liveSection.classList.remove('hidden');
-        elements.offlineMessage.classList.add('hidden');
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
         
-        // --- THIS IS THE NEW, MORE ACCURATE MESSAGE ---
-        if (elements.recordingStatus) {
-            elements.recordingStatus.textContent = "✅ A live stream was detected and has been successfully recorded.";
-        }
-        
-        const existingIframe = livePlayerDiv.querySelector('iframe');
-        const expectedSrc = `https://www.youtube.com/embed/${AppState.liveVideoId}?autoplay=1&mute=1`;
-        
-        if (!existingIframe || existingIframe.src !== expectedSrc) {
-            const iframe = document.createElement('iframe');
-            iframe.src = expectedSrc;
-            iframe.frameBorder = "0";
-            iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-            iframe.allowFullscreen = true;
-            livePlayerDiv.innerHTML = '';
-            livePlayerDiv.appendChild(iframe);
-        }
-    } else {
-        elements.statusDot.classList.add('offline');
-        elements.statusText.textContent = "OFFLINE";
-        elements.liveSection.classList.add('hidden');
-        elements.offlineMessage.classList.remove('hidden');
-        livePlayerDiv.innerHTML = '';
+      - name: Run Scraper and Downloader
+        id: downloader
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          python downloader.py
 
-        if (elements.recordingStatus) {
-            elements.recordingStatus.textContent = "";
-        }
-    }
-}
+      - name: Update videos.json database
+        id: update_videos
+        if: steps.downloader.outputs.new_video_json != '' && steps.downloader.outputs.new_video_json != 'null'
+        run: |
+          jq --argjson newVideo '${{ steps.downloader.outputs.new_video_json }}' '. + [$newVideo]' videos.json > temp.json && mv temp.json videos.json
 
-function updateNextStreamInfo() {
-    if (AppState.isLive || !elements.nextStreamInfo) return;
-    const now = new Date();
-    let nextStream = null;
-
-    for (const stream of AppState.schedule) {
-        const streamTime = new Date(stream.startTime);
-        if (streamTime > now) {
-            nextStream = stream;
-            break;
-        }
-    }
-
-    if (nextStream) {
-        const streamTime = new Date(nextStream.startTime);
-
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const startOfStreamDay = new Date(streamTime.getFullYear(), streamTime.getMonth(), streamTime.getDate());
-        const oneDay = 24 * 60 * 60 * 1000;
-        const diffDays = Math.round((startOfStreamDay - startOfToday) / oneDay);
-
-        let dayString;
-        if (diffDays === 0) {
-            dayString = "Today";
-        } else if (diffDays === 1) {
-            const weekday = streamTime.toLocaleDateString('en-GB', { weekday: 'long' });
-            dayString = `Tomorrow, ${weekday}`;
-        } else {
-            dayString = streamTime.toLocaleDateString('en-GB', { weekday: 'long' });
-        }
-        elements.nextStreamDay.textContent = `Next Class: ${dayString}`;
-
-        elements.nextStreamSubject.textContent = `Topic: ${nextStream.title}`;
-        
-        const timeDiff = streamTime - now;
-        const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
-
-        let countdownString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        if (days > 0) {
-            countdownString = `${days}d ${countdownString}`;
-        }
-        elements.countdownValue.textContent = countdownString;
-
-    } else {
-        elements.nextStreamDay.textContent = 'No upcoming classes';
-        elements.nextStreamSubject.textContent = 'Please check back later for updates.';
-        elements.countdownValue.textContent = '--:--:--';
-    }
-}
-
-function filterAndDisplayVideos() {
-    if (!AppState.currentSubject) {
-        elements.videoGrid.innerHTML = '';
-        elements.noResults.classList.add('hidden');
-        return;
-    }
-    const currentVideos = AppState.videos[AppState.currentSubject] || [];
-    let filtered = currentVideos.filter(video => !AppState.searchQuery || video.title.toLowerCase().includes(AppState.searchQuery));
-    filtered = sortVideos(filtered);
-    AppState.filteredVideos = filtered;
-    displayVideos(filtered);
-}
-
-function sortVideos(videos) {
-    return videos.sort((a, b) => {
-        switch (AppState.sortBy) {
-            case 'alphabetical': return a.title.localeCompare(b.title);
-            case 'duration': return parseDuration(b.duration) - parseDuration(a.duration);
-            default: return new Date(b.uploadDate) - new Date(a.uploadDate);
-        }
-    });
-}
-
-function displayVideos(videos) {
-    if (videos.length === 0) {
-        elements.videoGrid.classList.add('hidden');
-        elements.noResults.classList.remove('hidden');
-        return;
-    }
-    elements.videoGrid.classList.remove('hidden');
-    elements.noResults.classList.add('hidden');
-    elements.videoGrid.innerHTML = videos.map(video => createVideoCard(video)).join('');
-    elements.videoGrid.querySelectorAll('.video-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const videoId = card.dataset.videoId;
-            const video = AppState.filteredVideos.find(v => v.id === videoId);
-            if (video) openVideoModal(video);
-        });
-    });
-}
-
-function createVideoCard(video) {
-    const uploadDate = formatDate(video.uploadDate);
-    const subjectColor = getSubjectColor(video.subject);
-    return `<div class="video-card" data-video-id="${video.id}"><div class="video-thumbnail" style="background: ${subjectColor}"><div class="thumbnail-placeholder">▶️</div><div class="play-overlay"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg></div><div class="duration-badge">${video.duration}</div></div><div class="video-content"><h3 class="video-title">${video.title}</h3><div class="video-meta"><span class="video-subject">${video.subject}</span><span class="video-date">${uploadDate}</span></div></div></div>`;
-}
-
-function handleSearch() {
-    AppState.searchQuery = elements.searchInput.value.trim().toLowerCase();
-    filterAndDisplayVideos();
-}
-
-function toggleTheme() {
-    AppState.theme = AppState.theme === 'light' ? 'dark' : 'light';
-    localStorage.setItem('theme', AppState.theme);
-    applyTheme();
-}
-
-function handleSortChange() {
-    AppState.sortBy = elements.sortSelect.value;
-    filterAndDisplayVideos();
-}
-
-function handleSubjectChange(subject) {
-    AppState.currentSubject = subject;
-    elements.subjectTabsContainer.querySelectorAll('.tab-button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.subject === subject);
-    });
-    filterAndDisplayVideos();
-}
-
-function openVideoModal(video) {
-    // Pause the live player in the background
-    const livePlayerIframe = document.querySelector('#livePlayer iframe');
-    if (livePlayerIframe) {
-        AppState.livePlayerSrc = livePlayerIframe.src;
-        livePlayerIframe.src = '';
-    }
-
-    elements.modalTitle.textContent = video.title;
-    elements.modalDuration.textContent = `Duration: ${video.duration}`;
-    elements.modalDate.textContent = formatDate(video.uploadDate);
-    elements.modalStartTime.textContent = `Started at ${video.startTime}`;
-
-    const player = document.getElementById('modalPlayer');
-    elements.loadingIndicator.classList.remove('hidden');
-
-    if (video.gdrive_url) {
-        player.src = video.gdrive_url;
-        player.onload = () => {
-            elements.loadingIndicator.classList.add('hidden');
-        };
-    } else {
-        player.src = '';
-        elements.loadingIndicator.classList.add('hidden');
-    }
-
-    elements.videoModal.classList.remove('hidden');
-    elements.videoModal.classList.add('fade-in');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeVideoModal() {
-    // Stop the modal player
-    const player = document.getElementById('modalPlayer');
-    player.src = '';
-    elements.loadingIndicator.classList.add('hidden');
-    elements.videoModal.classList.add('hidden');
-    document.body.style.overflow = '';
-
-    // Resume the live player if it was playing
-    const livePlayerIframe = document.querySelector('#livePlayer iframe');
-    if (livePlayerIframe && AppState.livePlayerSrc) {
-        livePlayerIframe.src = AppState.livePlayerSrc;
-        AppState.livePlayerSrc = null; // Clear the stored src
-    }
-}
-
-function parseDuration(duration) {
-    if (!duration || typeof duration !== 'string') return 0;
-    const parts = duration.split(':').map(Number);
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    return 0;
-}
-
-function getSubjectColor(subject) {
-    const colors = {'Geography': 'var(--color-bg-1)','Polity': 'var(--color-bg-2)','Economy': 'var(--color-bg-3)','History': 'var(--color-bg-4)','Science': 'var(--color-bg-5)','Maths': 'var(--color-bg-6)','English': 'var(--color-bg-7)','Reasoning': 'var(--color-bg-8)','Others': 'var(--color-bg-1)'};
-    return colors[subject] || 'var(--color-bg-1)';
-}
-
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-document.addEventListener('DOMContentLoaded', initApp);
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'GitHub Actions Bot'
+          git config --global user.email 'actions-bot@github.com'
+          git add videos.json schedule.json live.json
+          if ! git diff --staged --quiet; then
+            git commit -m "feat: Update video library and schedule"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+          
+      # --- NEW NOTIFICATION STEP ---
+      - name: Create Issue on Authentication Failure
+        if: steps.downloader.outputs.auth_error == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --title "Action Required: YouTube Cookies Have Expired" --body "The automatic downloader failed because the YouTube cookies are no longer valid. Please update the YOUTUBE_COOKIES secret in your repository settings to ensure future classes are recorded. This is a manual step that needs to be done every few days."
