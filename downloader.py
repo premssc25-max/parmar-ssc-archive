@@ -9,7 +9,6 @@ import yt_dlp
 
 # --- SETTINGS ---
 CHANNEL_ID = "UC4h_7L2n2aC_j-gN-V_f_xw"
-#CHANNEL_ID = "UCSJ4gkVC6NrvII8umztf0Ow" # Lo-fi Girl Channel ID
 BASE_PATH = "/tmp/YouTubeClasses"
 RCLONE_REMOTE = "gdrive"
 API_KEY = os.environ.get('YOUTUBE_API_KEY')
