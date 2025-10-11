@@ -5,13 +5,16 @@ import requests
 import subprocess
 import json
 from datetime import datetime, timezone
+import yt_dlp # Moved import to the top
 
 # --- SETTINGS ---
 #CHANNEL_ID = "UC4h_7L2n2aC_j-gN-V_f_xw" # Parmar SSC Channel ID
 CHANNEL_ID = "UCSJ4gkVC6NrvII8umztf0Ow" # Lo-fi Girl Channel ID
 BASE_PATH = "/tmp/YouTubeClasses"
 RCLONE_REMOTE = "gdrive"
-API_KEY = os.environ.get('YOUTUBE_API_KEY') # Get API key from GitHub Secrets
+API_KEY = os.environ.get('YOUTUBE_API_KEY')
+YOUTUBE_COOKIES = os.environ.get('YOUTUBE_COOKIES')
+COOKIES_FILE = "/tmp/cookies.txt"
 
 # --- SUBJECT DETECTION ---
 def get_subject_from_title(title):
@@ -40,9 +43,8 @@ def upload_to_drive(local_path, subject):
         print(f"⚠️ An error occurred during upload: {e}")
         return None
 
-# --- DOWNLOAD LIVE VIDEO ---
+# --- DOWNLOAD LIVE VIDEO (NOW USES COOKIES) ---
 def download_live(url, info):
-    import yt_dlp
     title = info.get("title", "Unknown Live Class")
     subject = get_subject_from_title(title)
     folder = os.path.join(BASE_PATH, subject)
@@ -52,12 +54,13 @@ def download_live(url, info):
         "outtmpl": os.path.join(folder, f"{sanitized_title} [%(id)s].%(ext)s"),
         "format": "bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]",
         "live_from_start": True, "ignoreerrors": True, "no_warnings": True,
-        "fragment_retries": 50, "retries": 20
+        "fragment_retries": 50, "retries": 20,
+        "cookiefile": COOKIES_FILE if YOUTUBE_COOKIES else None # Use cookies for downloading
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info_dict)
+            ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
             downloaded_file = None
             base_path_without_ext = os.path.splitext(file_path)[0]
             for ext in ['.mp4', '.mkv', '.webm']:
@@ -72,8 +75,14 @@ def download_live(url, info):
 
 # --- MAIN FUNCTION ---
 def main():
+    if YOUTUBE_COOKIES:
+        with open(COOKIES_FILE, 'w') as f:
+            f.write(YOUTUBE_COOKIES)
+        print("🍪 YouTube cookies file created.")
+
     if not API_KEY:
-        print("🔴 ERROR: YOUTUBE_API_KEY secret not found. Please add it to your repository secrets.")
+        print("🔴 ERROR: YOUTUBE_API_KEY secret not found.")
+        # ... (rest of the error handling)
         with open('live.json', 'w') as f: json.dump({"liveVideoId": None}, f)
         with open('schedule.json', 'w') as f: json.dump([], f)
         return
@@ -82,6 +91,7 @@ def main():
     upcoming_schedule = []
 
     try:
+        # ... (API search logic is unchanged)
         search_url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={CHANNEL_ID}&eventType=live&type=video&key={API_KEY}"
         response = requests.get(search_url).json()
         if response.get('items'):
@@ -118,15 +128,10 @@ def main():
             subject = get_subject_from_title(live_info.get("title"))
             gdrive_url = upload_to_drive(file_path, subject)
             if gdrive_url:
-                # --- THIS BLOCK IS NOW CORRECTED ---
                 new_video_data = {
-                    "id": live_info.get("id"), 
-                    "title": live_info.get("title"),
-                    "duration": "N/A", 
-                    "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
-                    "startTime": "09:00", 
-                    "subject": subject, 
-                    "gdrive_url": gdrive_url
+                    "id": live_info.get("id"), "title": live_info.get("title"),
+                    "duration": "N/A", "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                    "startTime": "09:00", "subject": subject, "gdrive_url": gdrive_url
                 }
                 new_video_json = json.dumps(new_video_data)
     else:
@@ -135,8 +140,8 @@ def main():
     with open('live.json', 'w') as f: json.dump({"liveVideoId": live_video_id}, f)
     print("💾 live.json has been updated via API.")
         
-    # This part is for the deprecated set-output command, we can keep it as is for now
     if new_video_json:
+        # This part is for the deprecated set-output, which is fine to leave as is
         print(f"\n::set-output name=new_video_json::{new_video_json}")
 
 if __name__ == "__main__":
