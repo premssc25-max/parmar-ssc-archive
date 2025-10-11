@@ -1,9 +1,8 @@
-
-
 // Application State
 const AppState = {
     isLive: false,
     liveVideoId: null, // For storing the specific live video ID
+    livePlayerSrc: null, // To store the live player URL temporarily
     currentSubject: null,
     searchQuery: '',
     sortBy: 'latest',
@@ -44,11 +43,11 @@ const elements = {
     nextStreamSubject: document.getElementById('nextStreamSubject'),
     countdownValue: document.getElementById('countdownValue'),
     loadingIndicator: document.getElementById('loadingIndicator'),
+    recordingStatus: document.getElementById('recordingStatus')
 };
 
 // Initialize Application
 function initApp() {
-    // Fetches all three necessary data files
     Promise.all([
         fetch('videos.json').then(res => res.json()),
         fetch('schedule.json').then(res => res.json()),
@@ -61,7 +60,7 @@ function initApp() {
             AppState.videos[video.subject].push(video);
         });
         AppState.schedule = scheduleData;
-        AppState.liveVideoId = liveData.liveVideoId; // Saves the live video ID
+        AppState.liveVideoId = liveData.liveVideoId;
 
         populateSubjectTabs();
         loadUserPreferences();
@@ -133,16 +132,14 @@ function updateClock() {
     const istHour = istTime.getHours();
     const istDay = istTime.getDay();
     
-    //const isTimeForLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);   
-    //UpperLine Of code is permanent
-    const isTimeForLive = true;
-    //Upperline Of Code for test purpose
+    const isTimeForLive = (istHour >= 9 && (istHour < 11 || (istHour === 11 && istTime.getMinutes() < 45)) && istDay > 0 && istDay < 7);
     AppState.isLive = isTimeForLive && AppState.liveVideoId;
     
     updateLiveStatus();
     updateNextStreamInfo();
 }
 
+// THIS FUNCTION CONTAINS THE UPDATED MESSAGE
 function updateLiveStatus() {
     const livePlayerDiv = document.getElementById('livePlayer');
     if (!elements.liveSection || !elements.offlineMessage || !livePlayerDiv) return;
@@ -152,6 +149,11 @@ function updateLiveStatus() {
         elements.statusText.textContent = "LIVE";
         elements.liveSection.classList.remove('hidden');
         elements.offlineMessage.classList.add('hidden');
+        
+        // --- THIS IS THE NEW, MORE ACCURATE MESSAGE ---
+        if (elements.recordingStatus) {
+            elements.recordingStatus.textContent = "✅ A live stream was detected and has been successfully recorded.";
+        }
         
         const existingIframe = livePlayerDiv.querySelector('iframe');
         const expectedSrc = `https://www.youtube.com/embed/${AppState.liveVideoId}?autoplay=1&mute=1`;
@@ -171,10 +173,13 @@ function updateLiveStatus() {
         elements.liveSection.classList.add('hidden');
         elements.offlineMessage.classList.remove('hidden');
         livePlayerDiv.innerHTML = '';
+
+        if (elements.recordingStatus) {
+            elements.recordingStatus.textContent = "";
+        }
     }
 }
 
-// THIS IS THE FINAL, UPDATED FUNCTION
 function updateNextStreamInfo() {
     if (AppState.isLive || !elements.nextStreamInfo) return;
     const now = new Date();
@@ -300,13 +305,19 @@ function handleSubjectChange(subject) {
 }
 
 function openVideoModal(video) {
+    // Pause the live player in the background
+    const livePlayerIframe = document.querySelector('#livePlayer iframe');
+    if (livePlayerIframe) {
+        AppState.livePlayerSrc = livePlayerIframe.src;
+        livePlayerIframe.src = '';
+    }
+
     elements.modalTitle.textContent = video.title;
     elements.modalDuration.textContent = `Duration: ${video.duration}`;
     elements.modalDate.textContent = formatDate(video.uploadDate);
     elements.modalStartTime.textContent = `Started at ${video.startTime}`;
 
     const player = document.getElementById('modalPlayer');
-
     elements.loadingIndicator.classList.remove('hidden');
 
     if (video.gdrive_url) {
@@ -325,11 +336,19 @@ function openVideoModal(video) {
 }
 
 function closeVideoModal() {
+    // Stop the modal player
     const player = document.getElementById('modalPlayer');
     player.src = '';
     elements.loadingIndicator.classList.add('hidden');
     elements.videoModal.classList.add('hidden');
     document.body.style.overflow = '';
+
+    // Resume the live player if it was playing
+    const livePlayerIframe = document.querySelector('#livePlayer iframe');
+    if (livePlayerIframe && AppState.livePlayerSrc) {
+        livePlayerIframe.src = AppState.livePlayerSrc;
+        AppState.livePlayerSrc = null; // Clear the stored src
+    }
 }
 
 function parseDuration(duration) {
