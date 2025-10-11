@@ -7,12 +7,11 @@ import json
 from datetime import datetime, timezone
 
 # --- SETTINGS ---
-CHANNEL_ID = "UC4h_7L2n2aC_j-gN-V_f_xw" # Parmar SSC Channel ID
+#CHANNEL_ID = "UC4h_7L2n2aC_j-gN-V_f_xw" # Parmar SSC Channel ID
+CHANNEL_ID = "UCSJ4gkVC6NrvII8umztf0Ow" # Lo-fi Girl Channel ID
 BASE_PATH = "/tmp/YouTubeClasses"
 RCLONE_REMOTE = "gdrive"
-# This line securely reads the key from the GitHub Secret you created.
-# You DO NOT need to paste your key here.
-API_KEY = os.environ.get('YOUTUBE_API_KEY') 
+API_KEY = os.environ.get('YOUTUBE_API_KEY') # Get API key from GitHub Secrets
 
 # --- SUBJECT DETECTION ---
 def get_subject_from_title(title):
@@ -43,7 +42,7 @@ def upload_to_drive(local_path, subject):
 
 # --- DOWNLOAD LIVE VIDEO ---
 def download_live(url, info):
-    import yt_dlp # Import here to use it only when needed
+    import yt_dlp
     title = info.get("title", "Unknown Live Class")
     subject = get_subject_from_title(title)
     folder = os.path.join(BASE_PATH, subject)
@@ -75,7 +74,6 @@ def download_live(url, info):
 def main():
     if not API_KEY:
         print("🔴 ERROR: YOUTUBE_API_KEY secret not found. Please add it to your repository secrets.")
-        # Update files with null/empty to prevent website errors
         with open('live.json', 'w') as f: json.dump({"liveVideoId": None}, f)
         with open('schedule.json', 'w') as f: json.dump([], f)
         return
@@ -83,9 +81,7 @@ def main():
     live_info = None
     upcoming_schedule = []
 
-    # --- Use YouTube API to find live and upcoming videos ---
     try:
-        # Search for LIVE videos
         search_url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={CHANNEL_ID}&eventType=live&type=video&key={API_KEY}"
         response = requests.get(search_url).json()
         if response.get('items'):
@@ -96,7 +92,6 @@ def main():
                 "webpage_url": f"https://www.youtube.com/watch?v={live_item['id']['videoId']}"
             }
         
-        # Search for UPCOMING videos
         search_url_upcoming = f"https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={CHANNEL_ID}&eventType=upcoming&type=video&key={API_KEY}"
         response_upcoming = requests.get(search_url_upcoming).json()
         if response_upcoming.get('items'):
@@ -123,6 +118,26 @@ def main():
             subject = get_subject_from_title(live_info.get("title"))
             gdrive_url = upload_to_drive(file_path, subject)
             if gdrive_url:
+                # --- THIS BLOCK IS NOW CORRECTED ---
                 new_video_data = {
-                    "id": live_info.get("id"), "title": live_info.get("title"),
-                    "duration":
+                    "id": live_info.get("id"), 
+                    "title": live_info.get("title"),
+                    "duration": "N/A", 
+                    "uploadDate": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                    "startTime": "09:00", 
+                    "subject": subject, 
+                    "gdrive_url": gdrive_url
+                }
+                new_video_json = json.dumps(new_video_data)
+    else:
+        print("ℹ️ No stream is currently live.")
+    
+    with open('live.json', 'w') as f: json.dump({"liveVideoId": live_video_id}, f)
+    print("💾 live.json has been updated via API.")
+        
+    # This part is for the deprecated set-output command, we can keep it as is for now
+    if new_video_json:
+        print(f"\n::set-output name=new_video_json::{new_video_json}")
+
+if __name__ == "__main__":
+    main()
